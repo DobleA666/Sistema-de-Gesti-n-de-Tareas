@@ -1,0 +1,77 @@
+## Arquitectura en capas
+
+**Capa 1 — Frontend (Presentación)**
+Interfaz de usuario donde se muestran los tableros, listas y tarjetas. El usuario interactúa aquí: crea, edita, reordena con drag & drop y ve los cambios en tiempo real sin recargar la página.
+Tecnologías: HTML / CSS / JS vanilla, SortableJS, cliente WebSocket.
+
+**Capa 2 — Django Backend (Lógica)**
+El corazón del sistema. Procesa todas las peticiones HTTP, valida permisos, ejecuta queries a la base de datos y devuelve respuestas en JSON. Aquí se controla que cada usuario acceda únicamente a sus propios tableros.
+Tecnologías: Django 5.x, ORM, decoradores de permisos.
+
+**Capa 3 — Django Channels (Tiempo real)**
+Maneja las conexiones WebSocket. Cuando un usuario mueve una tarjeta, esta capa transmite ese cambio a todos los demás usuarios conectados al mismo tablero de forma instantánea. Redis actúa como mensajero entre procesos.
+Tecnologías: Django Channels 4.x, Redis, ASGI, Channel Groups.
+
+**Capa 4 — Base de Datos**
+Almacena toda la información del sistema. Las relaciones entre modelos permiten controlar permisos de forma granular.
+Tecnologías: MariaDB o PostgreSQL, migraciones Django.
+
+---
+
+## Modelos y sus relaciones
+
+**Board** — el tablero principal.
+Campos: título, owner (FK → User), fecha de creación, orden.
+Relaciones: miembros (ManyToMany con User), contiene muchas List.
+
+**List** — columna dentro de un tablero.
+Campos: título, board (FK → Board), posición, fecha de creación.
+Relaciones: contiene muchas Card.
+
+**Card** — tarjeta dentro de una lista.
+Campos: título, descripción, list (FK → List), posición, fecha de vencimiento.
+Relaciones: asignados (ManyToMany con User).
+
+**Membership** — controla quién puede acceder a qué tablero.
+Campos: user (FK → User), board (FK → Board), rol, fecha de ingreso.
+Es la pieza clave para los permisos por tablero.
+
+**Notification** — aviso cuando se asigna una tarjeta.
+Campos: destinatario (FK → User), card (FK → Card), mensaje, leída (booleano), fecha de creación.
+
+---
+
+## Funcionalidades clave
+
+- Auth y permisos: registro, login y control de acceso por tablero.
+- CRUD completo: crear, editar y eliminar tableros, listas y tarjetas.
+- Drag & Drop: reordenamiento visual con SortableJS, posiciones guardadas en BD.
+- Tiempo real: WebSockets con Channels, los cambios se sincronizan sin recargar.
+- Colaboración: invitar miembros a tableros y asignar tarjetas a usuarios.
+- Notificaciones: aviso automático al usuario cuando se le asigna una tarjeta.
+
+---
+
+## División del trabajo
+
+**Persona 1 — Backend Core**
+Modelos y migraciones, sistema de auth (registro y login), sistema de permisos, panel admin Django.
+
+**Persona 2 — Vistas + CRUD**
+CRUD de tableros, listas y tarjetas, lógica de posiciones para drag & drop, asignación de tarjetas a usuarios, endpoints que devuelven JSON.
+
+**Persona 3 — Channels + Frontend**
+Configuración de Channels y Redis, consumers WebSocket, JavaScript del drag & drop, sistema de notificaciones.
+
+---
+
+## Flujo de una acción (mover una tarjeta)
+
+1. El usuario arrastra una tarjeta en pantalla.
+2. SortableJS captura el evento en el navegador.
+3. Se hace un fetch (petición HTTP) a una vista Django.
+4. El ORM actualiza la posición de la tarjeta en la base de datos.
+5. La vista notifica al Channel Group del tablero.
+6. Todos los clientes conectados reciben el cambio y actualizan su interfaz.
+
+---
